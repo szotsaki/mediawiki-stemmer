@@ -1,0 +1,4 @@
+mediawiki-stemmer
+=================
+
+MediaWiki stemmer
