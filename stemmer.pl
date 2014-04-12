@@ -8,7 +8,6 @@ use utf8;
 use HTML::Parser;
 use LWP::Simple;
 use DBI;
-use DBD::SQLite;
 use Readonly;
 use English qw( -no_match_vars );
 
