@@ -2,23 +2,32 @@
 
 use strict;
 use warnings;
+use utf8;
 
 use Carp;
-use utf8;
+use DBI;
+use English qw( -no_match_vars );
 use HTML::Parser;
 use LWP::Simple;
-use DBI;
 use Readonly;
-use English qw( -no_match_vars );
+use String::ShellQuote;
+use Text::SimpleTable::AutoWidth;
 
 binmode STDOUT, ':encoding(UTF-8)';
 
 Readonly::Scalar my $MAX_WORDS => 3;
 
+# Startup check
+if ($#ARGV != 1) {
+  die "Usage: $PROGRAM_NAME <Wikipedia page name> <isStemmingRequired>\n";
+}
+
+my $page_name = shift;
+my $stemming_required = shift;
+
 # GET Wikipedia page
-my $page_name = 'Linux';
 my $web_page  = get("https://en.wikipedia.org/wiki/${page_name}?action=render")
-  or croak 'Unable to get page';
+  or croak 'Unable to get page: maybe this one has not been created yet?';
 
 # Remove unnecessary HTML elements
 my $parser = HTML::Parser->new(
@@ -68,14 +77,39 @@ for ( my $readahead = $MAX_WORDS ; $readahead > 0 ; $readahead-- ) {
     chop $expression;
     chop $expression_;
 
-    if ( ( $readahead != 1 || !exists $stop_words{$expression_} )
+    if ( ( $readahead != 1 || ! exists $stop_words{$expression} )
       && !exists $matched_words_cache{$expression} )
     {
+      # See if there is any match without altering the current expression
       $select->execute($expression_);
       my $row = $select->fetch;
-      if ($row) {
-        $matched_words{$expression}       = 0;
-        $matched_words_cache{$expression} = 0;
+      if ($row) { # If there is an instant match
+        $matched_words{$expression}       = $expression;
+        $matched_words_cache{$expression} = $expression;
+      } else { # If there isn't an instant match and we need stemming
+        next if ! $stemming_required;
+
+        # Get the last word and stem it
+        my @splitexpression = split q{ }, $expression;
+        my $stemmedword = pop @splitexpression;
+        my $argument = shell_quote_best_effort $stemmedword;
+        print "Stemming: $stemmedword... ";
+        $stemmedword = `echo $argument | hunspell -d en_US -s`;
+        chomp $stemmedword;
+        chomp $stemmedword;
+        $stemmedword = (split q{ }, $stemmedword)[-1];
+        print "$stemmedword\n";
+        push @splitexpression, $stemmedword;
+        my $stemmedexpression = join q{ }, @splitexpression;
+        my $stemmedexpression_ = join q{_}, @splitexpression;
+
+        # Re-run the query
+        $select->execute($stemmedexpression_);
+        $row = $select->fetch;
+        if ($row) {
+          $matched_words{$expression}       = $stemmedexpression;
+          $matched_words_cache{$expression} = $stemmedexpression;
+        }
       }
     }
   }
@@ -87,5 +121,36 @@ for ( my $readahead = $MAX_WORDS ; $readahead > 0 ; $readahead-- ) {
   %matched_words_cache = ();
 }
 
-print "Missing links:\n\n";
-print join "\n", keys %matched_words;
+# Compare the results with the original ones
+my %matched_wikipedia_link;
+sub a_tag_handler {
+  my $attr = shift;
+  if (exists $attr->{title}) {
+    $matched_wikipedia_link{$attr->{title}} = 0;
+  }
+
+  return;
+}
+
+my $parser_a = HTML::Parser->new(api_version => 3,
+                 start_h => [\&a_tag_handler, 'attr']
+             );
+$parser_a->ignore_elements(qw(script style table div h1 h2 h3 h4 h5 h6 ul ol));
+$parser_a->report_tags(qw(a));
+$parser_a->parse($web_page) || die "Can't parse output\n";
+$parser->eof();
+
+# Print out the comparison table
+my $table = Text::SimpleTable::AutoWidth->new(captions => ['Stemmer\'s new links', 'Wikipedia existing links']);
+
+my @sorted_matched_words = sort values %matched_words;
+my @sorted_wiki_words = sort keys %matched_wikipedia_link;
+my $max_length = ($#sorted_matched_words, $#sorted_wiki_words)[$#sorted_matched_words < $#sorted_wiki_words];
+
+for (0..$max_length) {
+  my $stemmer_link = $sorted_matched_words[$_] || q{};
+  my $wiki_link = $sorted_wiki_words[$_] || q{};
+  $table->row($stemmer_link, $wiki_link);
+}
+
+print $table->draw();
