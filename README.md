@@ -20,8 +20,8 @@ Run the application
 ```
 perl stemmer.pl <Wikipedia page name> <isStemmingRequired>
 ```
-* <Wikipedia page name>: Name of a Wikipedia article
-* <isStemmingRequired>: 1 or 0, depending on whether you want to stem the article words for best matching
+* <Wikipedia page name\>: Name of a Wikipedia article
+* <isStemmingRequired\>: 1 or 0, depending on whether you want to stem the article words for best matching
 
 Sample output
 -------------
