@@ -42,7 +42,8 @@ my $parsed_page = join q{}, map { $_->[0] } @parsed_page;
 $parsed_page =~
   s/\R{2,}(?:\h*\R)/\n/gsmx;    # \h: horizonatal whitespace; \R: ANYCRLF
 $parsed_page =~ s/(^\n)|(\n+$)//gsmx;    # Multiple newlines
-$parsed_page =~ s/ [.,()\/;] //gsmx;     # Lonely characters
+$parsed_page =~ s/ [.,()\/;:] //gsmx;    # Lonely characters
+$parsed_page =~ s/ \[\] //gsmx;          # Lonely double characters
 $parsed_page =~ s/&amp;/&/gsmx;          # &amp; -> &
 $parsed_page =~ s/[ ]{2}/ /gsmx;         # Double spaces
 $parsed_page =~ s/\[\d+\]//gsmx;         # References, like [43]
@@ -60,6 +61,7 @@ $dbh->do('PRAGMA cache_size = -520000');
 my $select = $dbh->prepare('SELECT Title FROM Titles WHERE Title = ?');
 
 # Iterating through the text
+my %stemmed_words_cache;
 my %matched_words_cache;
 my %matched_words;
 for ( my $readahead = $MAX_WORDS ; $readahead > 0 ; $readahead-- ) {
@@ -91,15 +93,18 @@ for ( my $readahead = $MAX_WORDS ; $readahead > 0 ; $readahead-- ) {
 
         # Get the last word and stem it
         my @splitexpression = split q{ }, $expression;
-        my $stemmedword = pop @splitexpression;
-        my $argument = shell_quote_best_effort $stemmedword;
-        print "Stemming: $stemmedword... ";
-        $stemmedword = `echo $argument | hunspell -d en_US -s`;
-        chomp $stemmedword;
-        chomp $stemmedword;
-        $stemmedword = (split q{ }, $stemmedword)[-1];
-        print "$stemmedword\n";
-        push @splitexpression, $stemmedword;
+        my $orig_stemmedword = pop @splitexpression;
+        next if ! $orig_stemmedword;
+        if (! exists $stemmed_words_cache{$orig_stemmedword}) {
+          my $argument = shell_quote_best_effort $orig_stemmedword;
+          print "Stemming $orig_stemmedword... ";
+          my $stemmedword = `echo $argument | hunspell -d en_US -s`;
+          $stemmedword =~ s/\R+//gsmx;
+          $stemmedword = (split q{ }, $stemmedword)[-1];
+          print "$stemmedword\n";
+          $stemmed_words_cache{$orig_stemmedword} = $stemmedword;
+        }
+        push @splitexpression, $stemmed_words_cache{$orig_stemmedword};
         my $stemmedexpression = join q{ }, @splitexpression;
         my $stemmedexpression_ = join q{_}, @splitexpression;
 
@@ -154,3 +159,10 @@ for (0..$max_length) {
 }
 
 print $table->draw();
+
+# Print out statistics
+print "\n\n";
+my $table_stats = Text::SimpleTable::AutoWidth->new(captions => ['Statistics', q{}]);
+$table_stats->row('Number of links in Wikipedia article:', scalar keys %matched_wikipedia_link);
+$table_stats->row('Number of new links found:', scalar keys %matched_words);
+print $table_stats->draw();
