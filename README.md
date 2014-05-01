@@ -5,7 +5,7 @@ This project tries to stem the words of a Wikipedia/MediaWiki article then enric
 
 Create the Wikipedia internal links structure
 ---------------------------------------------------
-1. Intall SQLite 3.8 or better (in v3.7 the .import functionality is severely broken)
+1. Install SQLite 3.8 or better (in v3.7 the .import functionality is severely broken)
 2. For stemming `hunspell` is required 
 3. Uncompress the `enwiki-latest-all-titles-in-ns0_ASCII_Unique.xz` file
 4. Import the uncompressed data into the database:

@@ -127,11 +127,11 @@ for ( my $readahead = $MAX_WORDS ; $readahead > 0 ; $readahead-- ) {
 }
 
 # Compare the results with the original ones
-my %matched_wikipedia_link;
+my %wikipedia_link;
 sub a_tag_handler {
   my $attr = shift;
   if (exists $attr->{title}) {
-    $matched_wikipedia_link{$attr->{title}} = 0;
+    $wikipedia_link{$attr->{title}} = 0;
   }
 
   return;
@@ -149,10 +149,10 @@ $parser->eof();
 my $table = Text::SimpleTable::AutoWidth->new(captions => ['Stemmer\'s new links', 'Wikipedia existing links']);
 
 my @sorted_matched_words = sort values %matched_words;
-my @sorted_wiki_words = sort keys %matched_wikipedia_link;
+my @sorted_wiki_words = sort keys %wikipedia_link;
 my $max_length = ($#sorted_matched_words, $#sorted_wiki_words)[$#sorted_matched_words < $#sorted_wiki_words];
 
-for (0..$max_length) {
+for ( 0 .. $max_length ) {
   my $stemmer_link = $sorted_matched_words[$_] || q{};
   my $wiki_link = $sorted_wiki_words[$_] || q{};
   $table->row($stemmer_link, $wiki_link);
@@ -163,6 +163,6 @@ print $table->draw();
 # Print out statistics
 print "\n\n";
 my $table_stats = Text::SimpleTable::AutoWidth->new(captions => ['Statistics', q{}]);
-$table_stats->row('Number of links in Wikipedia article:', scalar keys %matched_wikipedia_link);
+$table_stats->row('Number of links in Wikipedia article:', scalar keys %wikipedia_link);
 $table_stats->row('Number of new links found:', scalar keys %matched_words);
 print $table_stats->draw();
